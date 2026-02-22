@@ -7,6 +7,31 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&family=Roboto+Mono:wght@700;900&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <style>
+                .chat-message.typing-indicator {
+                    background: transparent;
+                    color: #aaa;
+                    font-style: italic;
+                    border: none;
+                    box-shadow: none;
+                }
+                .typing-anim {
+                    display: inline-block;
+                    font-size: 1rem;
+                    letter-spacing: 2px;
+                }
+                .dot {
+                    animation: blink 1s infinite alternate;
+                }
+                .dot:nth-child(2) {
+                    animation-delay: 0.2s;
+                }
+                .dot:nth-child(3) {
+                    animation-delay: 0.4s;
+                }
+                @keyframes blink {
+                    0% { opacity: 0.2; }
+                    100% { opacity: 1; }
+                }
         * {
             margin: 0;
             padding: 0;
@@ -417,6 +442,11 @@
             transition: transform 0.3s ease;
             display: flex;
             flex-direction: column;
+            z-index: 99;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
         }
 
         .chat-container.open {
@@ -472,9 +502,10 @@
         .chat-messages {
             flex: 1;
             overflow-y: auto;
+            min-height: 0;
             padding: 10px;
             display: flex;
-            flex-direction: column;
+            flex-direction: column-reverse;
             gap: 8px;
         }
 
@@ -1217,8 +1248,8 @@
                 ${content}
             `;
             
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            chatMessages.insertBefore(div, chatMessages.firstChild);
+            // No scroll needed; newest message is always visually at the bottom
         }
         
         function displayConversation(partner) {
@@ -1294,6 +1325,16 @@
         });
         
         chatInput.addEventListener('input', updateSendButton);
+                // Typing indicator logic
+                let typingTimeout = null;
+                chatInput.addEventListener('input', function() {
+                    if (!selectedRecipient) return;
+                    socket.emit('typing', { to: selectedRecipient, from: myColor });
+                    if (typingTimeout) clearTimeout(typingTimeout);
+                    typingTimeout = setTimeout(() => {
+                        // Optionally emit stop typing event here
+                    }, 2000);
+                });
         
         // GIF picker functionality
         let gifSearchTimeout = null;
@@ -1519,24 +1560,50 @@
         socket.on('whisper', (data) => {
             addChatMessage(data.from, myColor, data.message, false, data.isGif);
             lastMessageFrom = data.from;
-            
             // Track unread per player if not viewing their conversation
             if (selectedRecipient !== data.from || !chatContainer.classList.contains('open')) {
                 unreadPerPlayer[data.from]++;
                 updateRecipientBadges();
             }
-            
             // Show notification if chat is closed
             if (!chatContainer.classList.contains('open')) {
                 unreadCount++;
                 chatBadge.textContent = unreadCount;
                 chatBadge.classList.remove('hidden');
-                
                 // Vibrate on new message
                 if (navigator.vibrate) {
                     navigator.vibrate(100);
                 }
             }
+                // CSS for typing indicator should be in <style> section, not here
+                // If not already present, add the following to your <style> section:
+                /*
+                .chat-message.typing-indicator {
+                    background: transparent;
+                    color: #aaa;
+                    font-style: italic;
+                    border: none;
+                    box-shadow: none;
+                }
+                .typing-anim {
+                    display: inline-block;
+                    font-size: 1rem;
+                    letter-spacing: 2px;
+                }
+                .dot {
+                    animation: blink 1s infinite alternate;
+                }
+                .dot:nth-child(2) {
+                    animation-delay: 0.2s;
+                }
+                .dot:nth-child(3) {
+                    animation-delay: 0.4s;
+                }
+                @keyframes blink {
+                    0% { opacity: 0.2; }
+                    100% { opacity: 1; }
+                }
+                */
         });
         
         // Prevent screen from sleeping (where supported)

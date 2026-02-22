@@ -308,6 +308,9 @@ io.on('connection', (socket) => {
             });
         }
     });
+
+    // Typing indicator event
+    // Typing indicator logic removed
     
     // Player taps to end their turn (pass to next player)
     socket.on('endTurn', () => {
