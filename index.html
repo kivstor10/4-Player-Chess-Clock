@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>4-Player Chess Timer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&family=Roboto+Mono:wght@700;900&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #1a1a2e;
+            transition: background-color 0.3s ease;
+        }
+
+        /* Color Selection Screen */
+        #colorSelect {
+            text-align: center;
+            padding: 20px;
+        }
+
+        #colorSelect h1 {
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        #colorSelect p {
+            color: #aaa;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            max-width: 320px;
+            margin: 0 auto;
+        }
+
+        .color-btn {
+            width: 140px;
+            height: 140px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .color-btn:active {
+            transform: scale(0.95);
+        }
+
+        .color-btn.red { background: #e63946; }
+        .color-btn.yellow { background: #f9c74f; color: #333; }
+        .color-btn.green { background: #2a9d8f; }
+        .color-btn.blue { background: #457b9d; }
+
+        .color-btn.taken {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: scale(0.9);
+        }
+
+        .color-btn.taken::after {
+            content: ' ✓';
+        }
+
+        /* Timer Screen */
+        #timerScreen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            padding: 20px;
+        }
+
+        .timer-display {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 8rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            position: relative;
+            display: inline-block;
+        }
+
+        .timer-ms {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 2.5rem;
+            font-weight: 700;
+            opacity: 0.7;
+            font-variant-numeric: tabular-nums;
+            position: absolute;
+            left: 100%;
+            bottom: 0.15em;
+        }
+
+        .player-label {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.8);
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            letter-spacing: 3px;
+        }
+
+        .status-text {
+            font-size: 1.2rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .tap-hint {
+            position: absolute;
+            bottom: 40px;
+            font-size: 1rem;
+            color: rgba(255,255,255,0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .active-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 20px #4ade80;
+            animation: glow 1s infinite;
+        }
+
+        .active-indicator.inactive {
+            background: #666;
+            box-shadow: none;
+            animation: none;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 10px #4ade80; }
+            50% { box-shadow: 0 0 30px #4ade80; }
+        }
+
+        /* Other players times */
+        .other-players {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .other-player {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .other-player .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .other-player .color-dot.red { background: #e63946; }
+        .other-player .color-dot.yellow { background: #f9c74f; }
+        .other-player .color-dot.green { background: #2a9d8f; }
+        .other-player .color-dot.blue { background: #457b9d; }
+
+        .other-player.active {
+            color: white;
+            font-weight: 700;
+        }
+
+        .other-player.eliminated {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        .other-player.disconnected {
+            opacity: 0.6;
+            font-style: italic;
+        }
+
+        /* Background colors */
+        .bg-red { background: #e63946 !important; }
+        .bg-yellow { background: #f9c74f !important; }
+        .bg-green { background: #2a9d8f !important; }
+        .bg-blue { background: #457b9d !important; }
+
+        /* Waiting overlay */
+        .waiting-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 1.5rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .waiting-overlay.hidden {
+            display: none;
+        }
+
+        /* Pause overlay */
+        .pause-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 3rem;
+            z-index: 9999;
+        }
+        
+        .pause-overlay.hidden {
+            display: none;
+        }
+        
+        .pause-overlay .pause-text {
+            font-size: 2rem;
+            opacity: 0.8;
+        }
+
+        /* Eliminated overlay */
+        .eliminated-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 1.5rem;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .eliminated-overlay.hidden {
+            display: none;
+        }
+
+        /* Game Over */
+        .game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 200;
+        }
+
+        .game-over.hidden {
+            display: none;
+        }
+
+        .game-over h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .game-over p {
+            font-size: 1.5rem;
+            color: #aaa;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .timer-display {
+                font-size: 5rem;
+            }
+            
+            .timer-ms {
+                font-size: 1.5rem;
+            }
+            
+            .color-btn {
+                width: 120px;
+                height: 120px;
+            }
+            
+            #colorSelect h1 {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (max-height: 600px) {
+            .timer-display {
+                font-size: 4rem;
+            }
+            
+            .timer-ms {
+                font-size: 1.2rem;
+            }
+        }
+
+        /* Chat Button and Panel Styles */
+        .chat-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .chat-btn:active {
+            transform: scale(0.9);
+        }
+
+        .chat-btn .chat-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #e63946;
+            color: white;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
+        }
+
+        .chat-btn .chat-badge.hidden {
+            display: none;
+        }
+
+        .chat-container {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            max-width: 85%;
+            z-index: 99;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-container.open {
+            transform: translateX(0);
+        }
+
+        .chat-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 98;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .chat-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .chat-header {
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+        }
+
+        .chat-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .chat-body {
+            background: rgba(20,20,40,0.98);
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-message {
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            max-width: 85%;
+        }
+
+        .chat-message.received {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            align-self: flex-start;
+        }
+
+        .chat-message.sent {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            align-self: flex-end;
+        }
+
+        .chat-message .sender {
+            font-weight: 700;
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .chat-message .sender.red { color: #e63946; }
+        .chat-message .sender.yellow { color: #f9c74f; }
+        .chat-message .sender.green { color: #2a9d8f; }
+        .chat-message .sender.blue { color: #457b9d; }
+
+        .chat-input-area {
+            padding: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .recipient-select {
+            display: flex;
+            gap: 5px;
+        }
+
+        .recipient-btn {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            opacity: 0.5;
+            transition: all 0.2s ease;
+        }
+
+        .recipient-btn.selected {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .recipient-btn.disabled {
+            opacity: 0.2;
+            cursor: not-allowed;
+        }
+
+        .recipient-btn.red { background: #e63946; color: white; }
+        .recipient-btn.yellow { background: #f9c74f; color: #333; }
+        .recipient-btn.green { background: #2a9d8f; color: white; }
+        .recipient-btn.blue { background: #457b9d; color: white; }
+
+        .recipient-btn {
+            position: relative;
+        }
+
+        .recipient-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #e63946;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 0.65rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .recipient-badge.hidden {
+            display: none;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255,255,255,0.4);
+        }
+
+        .chat-send {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: #4ade80;
+            color: #1a1a2e;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chat-send:active {
+            transform: scale(0.95);
+        }
+
+        .chat-send:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .gif-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #00ff99 0%, #00ccff 50%, #9933ff 100%);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.5px;
+        }
+
+        .gif-btn:active {
+            transform: scale(0.95);
+        }
+
+        .gif-picker {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .gif-picker.open {
+            display: flex;
+        }
+
+        .gif-search-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .gif-search-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.85rem;
+        }
+
+        .gif-search-input::placeholder {
+            color: rgba(255,255,255,0.4);
+        }
+
+        .gif-close-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            cursor: pointer;
+        }
+
+        .gif-results {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .gif-results img {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        .gif-results img:active {
+            transform: scale(0.95);
+        }
+
+        .gif-loading {
+            text-align: center;
+            color: rgba(255,255,255,0.5);
+            padding: 20px;
+            font-size: 0.85rem;
+            grid-column: 1 / -1;
+        }
+
+        .chat-message img.chat-gif {
+            max-width: 150px;
+            border-radius: 0;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 480px) {
+            .chat-container {
+                width: 100%;
+                max-width: 100%;
+            }
+            
+            .chat-btn {
+                bottom: 15px;
+                right: 15px;
+            }
+            
+            .checkmate-btn {
+                bottom: 15px;
+                left: 15px;
+            }
+        }
+
+        /* Checkmate Button */
+        .checkmate-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            border-radius: 25px;
+            background: rgba(230, 57, 70, 0.8);
+            border: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            color: white;
+            z-index: 98;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .checkmate-btn:active {
+            transform: scale(0.95);
+        }
+
+        .checkmate-btn.eliminated {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(100, 100, 100, 0.8);
+        }
+
+        .checkmate-btn .skull {
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Color Selection Screen -->
+    <div id="colorSelect">
+        <h1>4-Player Chess Timer</h1>
+        <p>Select your color to join the game</p>
+        <div class="color-grid">
+            <button class="color-btn red" data-color="red">Red</button>
+            <button class="color-btn yellow" data-color="yellow">Yellow</button>
+            <button class="color-btn green" data-color="green">Green</button>
+            <button class="color-btn blue" data-color="blue">Blue</button>
+        </div>
+    </div>
+
+    <!-- Timer Screen -->
+    <div id="timerScreen">
+        <div class="active-indicator inactive" id="activeIndicator"></div>
+        
+        <div class="other-players" id="otherPlayers"></div>
+        
+        <div class="player-label" id="playerLabel">Your Timer</div>
+        <div class="timer-display" id="timerDisplay"><span id="timerMain">10:00</span><span class="timer-ms" id="timerMs">.0</span></div>
+        <div class="status-text" id="statusText">Waiting for players...</div>
+        
+        <div class="tap-hint" id="tapHint">Tap anywhere to pass turn</div>
+        
+        <div class="pause-overlay hidden" id="pauseOverlay">
+            <div>PAUSED</div>
+            <div class="pause-text">Waiting for host to resume...</div>
+        </div>
+        
+        <div class="eliminated-overlay hidden" id="eliminatedOverlay">
+            <p>ELIMINATED</p>
+            <p style="font-size: 1rem; margin-top: 10px; color: #aaa;">Waiting for game to reset...</p>
+        </div>
+        
+        <div class="waiting-overlay" id="waitingOverlay">
+            <p>Waiting for other players...</p>
+            <p style="font-size: 1rem; margin-top: 10px; color: #aaa;">Tap when it's your turn to pass</p>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div class="game-over hidden" id="gameOver">
+        <h1>Game Over!</h1>
+        <p id="winnerText">Winner: Red</p>
+        <p style="margin-top: 40px; opacity: 0.6; font-size: 1rem;">Tap anywhere to play again</p>
+    </div>
+
+    <!-- Chat Button -->
+    <button class="chat-btn" id="chatBtn" style="display: none;">
+        💬
+        <span class="chat-badge hidden" id="chatBadge">0</span>
+    </button>
+
+    <!-- Checkmate Button -->
+    <button class="checkmate-btn" id="checkmateBtn">
+        I'm Out
+    </button>
+
+    <!-- Chat Overlay -->
+    <div class="chat-overlay" id="chatOverlay"></div>
+
+    <!-- Chat Panel -->
+    <div class="chat-container" id="chatContainer">
+        <div class="chat-header">
+            <span>💬 Whisper</span>
+            <button class="chat-close" id="chatClose">×</button>
+        </div>
+        <div class="chat-body">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-area">
+                <div class="recipient-select" id="recipientSelect">
+                    <button class="recipient-btn red" data-recipient="red">Red<span class="recipient-badge hidden" data-badge="red">0</span></button>
+                    <button class="recipient-btn yellow" data-recipient="yellow">Yellow<span class="recipient-badge hidden" data-badge="yellow">0</span></button>
+                    <button class="recipient-btn green" data-recipient="green">Green<span class="recipient-badge hidden" data-badge="green">0</span></button>
+                    <button class="recipient-btn blue" data-recipient="blue">Blue<span class="recipient-badge hidden" data-badge="blue">0</span></button>
+                </div>
+                <div class="gif-picker" id="gifPicker">
+                    <div class="gif-search-row">
+                        <input type="text" class="gif-search-input" id="gifSearchInput" placeholder="Search GIFs...">
+                        <button class="gif-close-btn" id="gifCloseBtn">✕</button>
+                    </div>
+                    <div class="gif-results" id="gifResults">
+                        <div class="gif-loading">Search for GIFs...</div>
+                    </div>
+                </div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." maxlength="200">
+                    <button class="gif-btn" id="gifBtn" title="Send GIF">GIF</button>
+                    <button class="chat-send" id="chatSend">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        let myColor = null;
+        let gameState = {
+            players: {},
+            activePlayer: null,
+            gameStarted: false
+        };
+        let timerSeconds = 600;
+        let playersRequired = 4;
+        let chatEnabled = true;
+        
+        // Generate or retrieve session ID for reconnection
+        let sessionId = localStorage.getItem('chessTimerSession');
+        if (!sessionId) {
+            sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            localStorage.setItem('chessTimerSession', sessionId);
+        }
+        
+        // Check for saved color from previous session
+        const savedColor = localStorage.getItem('chessTimerColor');
+        
+        // Color mappings
+        const colorNames = {
+            red: 'Red',
+            yellow: 'Yellow',
+            green: 'Green',
+            blue: 'Blue'
+        };
+        
+        const colorHex = {
+            red: '#e63946',
+            yellow: '#f9c74f',
+            green: '#2a9d8f',
+            blue: '#457b9d'
+        };
+        
+        // DOM Elements
+        const colorSelect = document.getElementById('colorSelect');
+        const timerScreen = document.getElementById('timerScreen');
+        const timerMain = document.getElementById('timerMain');
+        const timerMs = document.getElementById('timerMs');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const statusText = document.getElementById('statusText');
+        const playerLabel = document.getElementById('playerLabel');
+        const activeIndicator = document.getElementById('activeIndicator');
+        const tapHint = document.getElementById('tapHint');
+        const waitingOverlay = document.getElementById('waitingOverlay');
+        const otherPlayers = document.getElementById('otherPlayers');
+        const gameOverScreen = document.getElementById('gameOver');
+        const winnerText = document.getElementById('winnerText');
+        const colorBtns = document.querySelectorAll('.color-btn');
+        
+        // Chat DOM Elements
+        const chatContainer = document.getElementById('chatContainer');
+        const chatBtn = document.getElementById('chatBtn');
+        const chatClose = document.getElementById('chatClose');
+        const chatOverlay = document.getElementById('chatOverlay');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const chatSend = document.getElementById('chatSend');
+        const chatBadge = document.getElementById('chatBadge');
+        const recipientBtns = document.querySelectorAll('.recipient-btn');
+        
+        // GIF DOM Elements
+        const gifBtn = document.getElementById('gifBtn');
+        const gifPicker = document.getElementById('gifPicker');
+        const gifSearchInput = document.getElementById('gifSearchInput');
+        const gifResults = document.getElementById('gifResults');
+        const gifCloseBtn = document.getElementById('gifCloseBtn');
+        const GIPHY_API_KEY = 'jpOaQXkTsbcLKz28Aq3mKsOnh1W69xUX';
+        
+        // Checkmate button
+        const checkmateBtn = document.getElementById('checkmateBtn');
+        let isEliminated = false;
+        
+        let selectedRecipient = null;
+        let unreadCount = 0;
+        let lastMessageFrom = null;
+        
+        // Per-player conversation storage and unread counts
+        const conversations = { red: [], yellow: [], green: [], blue: [] };
+        const unreadPerPlayer = { red: 0, yellow: 0, green: 0, blue: 0 };
+        
+        // Format time - now handles milliseconds
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const milliseconds = Math.floor((ms % 1000) / 100); // Get tenths of second
+            
+            let mainTime;
+            if (totalSeconds < 60) {
+                mainTime = totalSeconds.toString();
+            } else {
+                const mins = Math.floor(totalSeconds / 60);
+                const secs = totalSeconds % 60;
+                mainTime = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            return { main: mainTime, ms: `.${milliseconds}` };
+        }
+        
+        // Update the display
+        function updateDisplay() {
+            if (!myColor || !gameState.players[myColor]) return;
+            
+            const eliminatedOverlay = document.getElementById('eliminatedOverlay');
+            const timerDisplay = document.getElementById('timerDisplay');
+
+            // Check if player is eliminated - show overlay and hide waiting
+            if (isEliminated || gameState.players[myColor].eliminated) {
+                eliminatedOverlay.classList.remove('hidden');
+                waitingOverlay.classList.add('hidden');
+                statusText.textContent = 'ELIMINATED';
+                tapHint.textContent = '';
+                timerDisplay.style.visibility = 'hidden';
+                return; // Don't show turn info
+            } else {
+                eliminatedOverlay.classList.add('hidden');
+            }
+            
+            // Update my timer
+            const time = formatTime(gameState.players[myColor].timeRemaining);
+            timerMain.textContent = time.main;
+            timerMs.textContent = time.ms;
+            
+            // Update active state
+            const isMyTurn = gameState.activePlayer === myColor;
+            activeIndicator.classList.toggle('inactive', !isMyTurn);
+
+            // Show timer for all players before game starts
+            if (!gameState.gameStarted) {
+                timerDisplay.style.visibility = 'visible';
+            } else if (isMyTurn) {
+                timerDisplay.style.visibility = 'visible';
+            } else {
+                timerDisplay.style.visibility = 'hidden';
+            }
+
+            if (!gameState.gameStarted) {
+                const connectedPlayers = Object.values(gameState.players).filter(p => p.taken).length;
+                if (connectedPlayers < playersRequired) {
+                    statusText.textContent = `Waiting for players (${connectedPlayers}/${playersRequired})`;
+                    tapHint.textContent = '';
+                } else {
+                    // Find first player in order who is connected
+                    const order = ['red', 'yellow', 'green', 'blue'];
+                    let firstPlayer = null;
+                    for (const color of order) {
+                        if (gameState.players[color] && gameState.players[color].taken) {
+                            firstPlayer = color;
+                            break;
+                        }
+                    }
+                    
+                    if (myColor === firstPlayer) {
+                        statusText.textContent = 'You start first!';
+                        tapHint.textContent = 'Tap anywhere to start your clock';
+                    } else {
+                        statusText.textContent = `${colorNames[firstPlayer]} starts first`;
+                        tapHint.textContent = 'Waiting for them to start...';
+                    }
+                }
+                waitingOverlay.classList.add('hidden');
+            } else if (isMyTurn) {
+                statusText.textContent = "It's your turn!";
+                tapHint.textContent = 'Tap anywhere to end your turn';
+                waitingOverlay.classList.add('hidden');
+            } else {
+                statusText.textContent = `Waiting for ${colorNames[gameState.activePlayer]}...`;
+                tapHint.textContent = '';
+                waitingOverlay.classList.remove('hidden');
+                waitingOverlay.querySelector('p').textContent = `${colorNames[gameState.activePlayer]}'s turn`;
+            }
+            
+            // Update other players display
+            updateOtherPlayers();
+        }
+        
+        // Update other players times
+        function updateOtherPlayers() {
+            otherPlayers.innerHTML = '';
+            
+            // Only show other players once game has started
+            if (!gameState.gameStarted) return;
+            
+            const order = ['red', 'yellow', 'green', 'blue'];
+            for (const color of order) {
+                if (color === myColor) continue;
+                if (!gameState.players[color] || !gameState.players[color].taken) continue;
+                
+                const isElim = gameState.players[color].eliminated;
+                const isDisc = gameState.players[color].disconnected;
+                const div = document.createElement('div');
+                div.className = `other-player ${gameState.activePlayer === color ? 'active' : ''} ${isElim ? 'eliminated' : ''} ${isDisc ? 'disconnected' : ''}`;
+                const time = formatTime(gameState.players[color].timeRemaining);
+                let statusText;
+                if (isElim) {
+                    statusText = '💀 OUT';
+                } else if (isDisc) {
+                    statusText = '📴 AWAY';
+                } else {
+                    statusText = time.main + time.ms;
+                }
+                div.innerHTML = `
+                    <span class="color-dot ${color}"></span>
+                    <span>${colorNames[color]}: ${statusText}</span>
+                `;
+                otherPlayers.appendChild(div);
+            }
+        }
+        
+        // Update color button states
+        function updateColorButtons() {
+            colorBtns.forEach(btn => {
+                const color = btn.dataset.color;
+                if (gameState.players[color] && gameState.players[color].taken) {
+                    btn.classList.add('taken');
+                    btn.disabled = true;
+                } else {
+                    btn.classList.remove('taken');
+                    btn.disabled = false;
+                }
+            });
+        }
+        
+        // Switch to timer screen
+        function showTimerScreen() {
+            colorSelect.style.display = 'none';
+            timerScreen.style.display = 'flex';
+            document.body.className = `bg-${myColor}`;
+            playerLabel.textContent = `${colorNames[myColor]} Player`;
+            updateDisplay();
+            if (chatEnabled) initChat();
+            checkmateBtn.style.display = 'flex';
+        }
+        
+        // Color button click handlers
+        colorBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const color = btn.dataset.color;
+                if (!btn.classList.contains('taken')) {
+                    socket.emit('selectColor', { color: color, sessionId: sessionId });
+                }
+            });
+        });
+        
+        // Timer screen tap handler
+        timerScreen.addEventListener('click', (e) => {
+            // Don't trigger if clicking on chat button or chat panel
+            if (e.target.closest('.chat-container') || e.target.closest('.chat-btn')) return;
+            socket.emit('endTurn');
+        });
+        
+        // Chat functionality
+        function initChat() {
+            chatBtn.style.display = 'flex';
+            updateRecipientButtons();
+        }
+        
+        function openChat() {
+            chatBtn.style.display = 'none';
+            chatContainer.classList.add('open');
+            chatOverlay.classList.add('visible');
+            unreadCount = 0;
+            chatBadge.textContent = '0';
+            chatBadge.classList.add('hidden');
+            
+            // Auto-select last message sender as recipient
+            if (lastMessageFrom && gameState.players[lastMessageFrom] && gameState.players[lastMessageFrom].taken) {
+                recipientBtns.forEach(btn => {
+                    btn.classList.remove('selected');
+                    if (btn.dataset.recipient === lastMessageFrom) {
+                        btn.classList.add('selected');
+                    }
+                });
+                selectedRecipient = lastMessageFrom;
+                
+                // Show this conversation
+                displayConversation(selectedRecipient);
+                
+                // Clear unread for this player
+                unreadPerPlayer[selectedRecipient] = 0;
+                updateRecipientBadges();
+                
+                updateSendButton();
+                chatInput.focus();
+            }
+        }
+        
+        function closeChat() {
+            chatContainer.classList.remove('open');
+            chatOverlay.classList.remove('visible');
+            chatBtn.style.display = 'flex';
+        }
+        
+        function updateRecipientButtons() {
+            recipientBtns.forEach(btn => {
+                const color = btn.dataset.recipient;
+                
+                // Hide own color button
+                if (color === myColor) {
+                    btn.style.display = 'none';
+                    return;
+                }
+                
+                btn.style.display = 'block';
+                
+                // Disable if player not connected
+                if (!gameState.players[color] || !gameState.players[color].taken) {
+                    btn.classList.add('disabled');
+                    btn.classList.remove('selected');
+                    if (selectedRecipient === color) {
+                        selectedRecipient = null;
+                    }
+                } else {
+                    btn.classList.remove('disabled');
+                }
+            });
+            
+            updateSendButton();
+        }
+        
+        function updateSendButton() {
+            chatSend.disabled = !selectedRecipient || chatInput.value.trim() === '';
+        }
+        
+        function addChatMessage(from, to, message, isSent, isGif = false) {
+            // Determine conversation partner (the other person)
+            const partner = isSent ? to : from;
+            
+            // Store message in conversation
+            const msgData = { from, to, message, isSent, isGif };
+            conversations[partner].push(msgData);
+            
+            // Only display if this conversation is currently selected
+            if (selectedRecipient === partner) {
+                displayMessage(msgData);
+            }
+        }
+        
+        function displayMessage(msgData) {
+            const { from, to, message, isSent, isGif } = msgData;
+            const div = document.createElement('div');
+            div.className = `chat-message ${isSent ? 'sent' : 'received'}`;
+            
+            const senderLabel = isSent ? `To ${colorNames[to]}` : `From ${colorNames[from]}`;
+            let content;
+            if (isGif) {
+                content = `<img src="${escapeHtml(message)}" class="chat-gif" alt="GIF">`;
+            } else {
+                content = escapeHtml(message);
+            }
+            div.innerHTML = `
+                <span class="sender ${isSent ? to : from}">${senderLabel}</span>
+                ${content}
+            `;
+            
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function displayConversation(partner) {
+            chatMessages.innerHTML = '';
+            conversations[partner].forEach(msg => displayMessage(msg));
+        }
+        
+        function updateRecipientBadges() {
+            for (const color of ['red', 'yellow', 'green', 'blue']) {
+                const badge = document.querySelector(`[data-badge="${color}"]`);
+                if (badge) {
+                    if (unreadPerPlayer[color] > 0) {
+                        badge.textContent = unreadPerPlayer[color];
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                }
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message || !selectedRecipient) return;
+            
+            socket.emit('whisper', {
+                to: selectedRecipient,
+                message: message
+            });
+            
+            addChatMessage(myColor, selectedRecipient, message, true);
+            chatInput.value = '';
+            updateSendButton();
+        }
+        
+        // Chat event listeners
+        chatBtn.addEventListener('click', openChat);
+        chatClose.addEventListener('click', closeChat);
+        chatOverlay.addEventListener('click', closeChat);
+        
+        recipientBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.classList.contains('disabled')) return;
+                
+                recipientBtns.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedRecipient = btn.dataset.recipient;
+                
+                // Show this conversation
+                displayConversation(selectedRecipient);
+                
+                // Clear unread for this player
+                unreadPerPlayer[selectedRecipient] = 0;
+                updateRecipientBadges();
+                
+                updateSendButton();
+                chatInput.focus();
+            });
+        });
+        
+        chatSend.addEventListener('click', sendMessage);
+        
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        chatInput.addEventListener('input', updateSendButton);
+        
+        // GIF picker functionality
+        let gifSearchTimeout = null;
+        
+        gifBtn.addEventListener('click', () => {
+            gifPicker.classList.toggle('open');
+            if (gifPicker.classList.contains('open')) {
+                gifSearchInput.focus();
+            }
+        });
+        
+        gifCloseBtn.addEventListener('click', () => {
+            gifPicker.classList.remove('open');
+        });
+        
+        gifSearchInput.addEventListener('input', () => {
+            clearTimeout(gifSearchTimeout);
+            gifSearchTimeout = setTimeout(() => {
+                searchGifs(gifSearchInput.value.trim());
+            }, 300);
+        });
+        
+        async function searchGifs(query) {
+            if (!query) {
+                gifResults.innerHTML = '<div class="gif-loading">Search for GIFs above</div>';
+                return;
+            }
+            
+            gifResults.innerHTML = '<div class="gif-loading">Searching...</div>';
+            
+            try {
+                const response = await fetch(
+                    `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=12&rating=pg-13`
+                );
+                const data = await response.json();
+                
+                if (data.data.length === 0) {
+                    gifResults.innerHTML = '<div class="gif-loading">No GIFs found</div>';
+                    return;
+                }
+                
+                gifResults.innerHTML = '';
+                data.data.forEach(gif => {
+                    const img = document.createElement('img');
+                    img.src = gif.images.fixed_height_small.url;
+                    img.dataset.fullUrl = gif.images.fixed_height.url;
+                    img.alt = gif.title;
+                    img.addEventListener('click', () => sendGif(gif.images.fixed_height.url));
+                    gifResults.appendChild(img);
+                });
+            } catch (error) {
+                console.error('GIF search error:', error);
+                gifResults.innerHTML = '<div class="gif-loading">Error searching GIFs</div>';
+            }
+        }
+        
+        function sendGif(gifUrl) {
+            if (!selectedRecipient) {
+                alert('Please select a recipient first');
+                return;
+            }
+            
+            socket.emit('whisper', {
+                to: selectedRecipient,
+                message: gifUrl,
+                isGif: true
+            });
+            
+            addChatMessage(myColor, selectedRecipient, gifUrl, true, true);
+            gifPicker.classList.remove('open');
+            gifSearchInput.value = '';
+            gifResults.innerHTML = '<div class="gif-loading">Search for GIFs above</div>';
+        }
+        
+        // Checkmate button handler
+        checkmateBtn.addEventListener('click', () => {
+            if (isEliminated) return;
+            
+            if (confirm('Are you sure you want to mark yourself as eliminated?')) {
+                socket.emit('checkmated');
+                isEliminated = true;
+                checkmateBtn.classList.add('eliminated');
+                checkmateBtn.innerHTML = '<span class="skull">💀</span> Eliminated';
+            }
+        });
+        
+        // Socket event handlers
+        socket.on('gameState', (data) => {
+            gameState.players = data.players;
+            gameState.activePlayer = data.activePlayer;
+            gameState.gameStarted = data.gameStarted;
+            timerSeconds = data.timerSeconds;
+            playersRequired = data.playersRequired || 4;
+            chatEnabled = data.chatEnabled ?? true;
+            updateColorButtons();
+            
+            // Try session-based reconnection first (works even if page was refreshed mid-game)
+            if (!myColor && savedColor) {
+                socket.emit('reconnectSession', sessionId);
+            }
+        });
+        
+        // Session not found - fall back to showing color selection
+        socket.on('sessionNotFound', () => {
+            console.log('Session not found, showing color selection');
+            // If we had a saved color, clear it since we can't reconnect
+            if (savedColor) {
+                localStorage.removeItem('chessTimerColor');
+            }
+        });
+        
+        socket.on('colorSelected', (data) => {
+            gameState.players = data.players;
+            updateColorButtons();
+            if (myColor) {
+                updateRecipientButtons();
+                updateDisplay();
+            }
+        });
+        
+        socket.on('colorConfirmed', (data) => {
+            myColor = data.color;
+            localStorage.setItem('chessTimerColor', myColor);
+            
+            // If reconnecting, restore game state
+            if (data.reconnected && data.gameState) {
+                gameState.players = data.gameState.players;
+                gameState.activePlayer = data.gameState.activePlayer;
+                gameState.gameStarted = data.gameState.gameStarted;
+                gameState.gameOver = data.gameState.gameOver;
+                
+                // Check if we were eliminated before disconnect
+                if (gameState.players[myColor].eliminated) {
+                    isEliminated = true;
+                }
+            }
+            
+            showTimerScreen();
+        });
+        
+        socket.on('colorError', (data) => {
+            alert(data.message);
+        });
+        
+        socket.on('gameStarted', (data) => {
+            gameState.activePlayer = data.activePlayer;
+            gameState.players = data.players;
+            gameState.gameStarted = true;
+            updateDisplay();
+        });
+        
+        socket.on('turnChange', (data) => {
+            gameState.activePlayer = data.activePlayer;
+            gameState.players = data.players;
+            updateDisplay();
+            
+            // Vibrate on turn change if it's my turn
+            if (data.activePlayer === myColor && navigator.vibrate) {
+                navigator.vibrate(200);
+            }
+        });
+        
+        socket.on('timeUpdate', (data) => {
+            gameState.players = data.players;
+            gameState.activePlayer = data.activePlayer;
+            updateDisplay();
+        });
+        
+        socket.on('playerDisconnected', (data) => {
+            gameState.players = data.players;
+            updateColorButtons();
+            updateDisplay();
+            if (myColor) updateRecipientButtons();
+        });
+        
+        socket.on('playerEliminated', (data) => {
+            gameState.players = data.players;
+            updateDisplay();
+            if (myColor) updateRecipientButtons();
+            
+            // Update eliminated status if it's us
+            if (data.color === myColor) {
+                isEliminated = true;
+                checkmateBtn.classList.add('eliminated');
+                checkmateBtn.innerHTML = '<span class="skull">💀</span> Eliminated';
+                // Show eliminated overlay
+                document.getElementById('eliminatedOverlay').classList.remove('hidden');
+            }
+        });
+        
+        socket.on('gameOver', (data) => {
+            gameOverScreen.classList.remove('hidden');
+            winnerText.textContent = data.winner 
+                ? `Winner: ${colorNames[data.winner]}!` 
+                : 'No winner';
+            localStorage.removeItem('chessTimerColor');
+            
+            // Add click handler for restart
+        });
+        
+        socket.on('gamePaused', (isPaused) => {
+            const pauseOverlay = document.getElementById('pauseOverlay');
+            if (isPaused) {
+                pauseOverlay.classList.remove('hidden');
+            } else {
+                pauseOverlay.classList.add('hidden');
+            }
+            gameOverScreen.addEventListener('click', () => {
+                socket.emit('resetGame');
+            }, { once: true });
+        });
+        
+        socket.on('gameReset', () => {
+            localStorage.removeItem('chessTimerColor');
+            localStorage.removeItem('chessTimerSession');
+            location.reload();
+        });
+        
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+        
+        socket.on('whisper', (data) => {
+            addChatMessage(data.from, myColor, data.message, false, data.isGif);
+            lastMessageFrom = data.from;
+            
+            // Track unread per player if not viewing their conversation
+            if (selectedRecipient !== data.from || !chatContainer.classList.contains('open')) {
+                unreadPerPlayer[data.from]++;
+                updateRecipientBadges();
+            }
+            
+            // Show notification if chat is closed
+            if (!chatContainer.classList.contains('open')) {
+                unreadCount++;
+                chatBadge.textContent = unreadCount;
+                chatBadge.classList.remove('hidden');
+                
+                // Vibrate on new message
+                if (navigator.vibrate) {
+                    navigator.vibrate(100);
+                }
+            }
+        });
+        
+        // Prevent screen from sleeping (where supported)
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.log('Wake Lock error:', err);
+                }
+            }
+        }
+        requestWakeLock();
+        
+        // Handle visibility change to re-request wake lock
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        });
+    </script>
+</body>
+</html>

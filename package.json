@@ -1,0 +1,15 @@
+{
+  "name": "4player-chess-timer",
+  "version": "1.0.0",
+  "description": "Four player chess timer with real-time synchronization",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "selfsigned": "^5.5.0",
+    "socket.io": "^4.6.1",
+    "sudo-prompt": "^9.2.1"
+  }
+}
